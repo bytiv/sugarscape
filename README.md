@@ -2,7 +2,7 @@
 
 A Python simulation of Epstein & Axtell's Sugarscape model showing how simple agent behaviors create complex social patterns like wealth inequality.
 
-## Quick Run 🚀
+## Quick Run
 
 ```bash
 # 1. Clone & enter
@@ -17,7 +17,7 @@ python sugarscape_simulation.py
 python sugarscape_analysis.py
 ```
 
-## What You'll See 📊
+## What You'll See
 
 **Terminal Output:**
 ```
@@ -28,27 +28,27 @@ Config 1: 100 agents, no reproduction
 Step 100/500 - Population: 0 (DIED OUT)
 
 Config 2: 100 agents with reproduction  
-Step 500/500 - Population: 510 ✅
+Step 500/500 - Population: 510
 Wealth Inequality: Gini = 0.264
 
 Config 3: 50 agents with reproduction
-Step 500/500 - Population: 474 ✅
+Step 500/500 - Population: 474
 Wealth Inequality: Gini = 0.249
 ```
 
 **What It Shows:**
-- 🚫 No reproduction = everyone dies (resource exhaustion)
-- ✅ Reproduction = sustainable population (~500 agents)
-- 📈 Emergent wealth inequality (Gini coefficient ~0.25)
-- 📊 Graphs saved as PNG files automatically
+- No reproduction = everyone dies (resource exhaustion)
+- Reproduction = sustainable population (~500 agents)
+- Emergent wealth inequality (Gini coefficient ~0.25)
+- Graphs saved as PNG files automatically
 
-## Files You Get 📁
+## Files You Get
 - `sugarscape_model.py` - Core simulation engine
 - `sugarscape_simulation.py` - Runs 3 scenarios
 - `sugarscape_analysis.py` - Creates graphs
 - `simulation_results/` - CSV data + PNG graphs
 
-## One Command To Run All 🏃
+## One Command To Run All
 ```bash
 python sugarscape_simulation.py && python sugarscape_analysis.py
 ```
