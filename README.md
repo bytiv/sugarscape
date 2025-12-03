@@ -2,6 +2,9 @@
 
 A Python simulation of Epstein & Axtell's Sugarscape model showing how simple agent behaviors create complex social patterns like wealth inequality.
 
+**Student:** Nikita Devi Gurumayum  
+**Student ID:** SCSJ2400109
+
 ## Quick Run
 
 ```bash
