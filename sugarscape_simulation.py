@@ -21,6 +21,7 @@ def run_simulation(config_name: str, num_agents: int, reproduction: bool,
         num_steps: Number of time steps to simulate
         save_frequency: Save agent data every N steps
     """
+    # Header printout to summarize configuration when run from CLI
     print(f"\n{'='*60}")
     print(f"Running simulation: {config_name}")
     print(f"Initial agents: {num_agents}")
@@ -32,19 +33,20 @@ def run_simulation(config_name: str, num_agents: int, reproduction: bool,
     env = Sugarscape(width=50, height=50, initial_agents=num_agents, 
                      reproduction=reproduction)
     
-    # Prepare CSV files
+    # Prepare CSV output files in the current working directory. Two files
+    # are created per configuration: one for time-series statistics and one
+    # for snapshot agent-level data.
     stats_filename = f"{config_name}_statistics.csv"
     agents_filename = f"{config_name}_agents.csv"
-    
-    # Write statistics header
+
+    # Write header rows (overwrite any existing files for a fresh run)
     with open(stats_filename, 'w', newline='') as f:
         writer = csv.DictWriter(f, fieldnames=[
             'time_step', 'population', 'avg_sugar', 'avg_age', 
             'total_born', 'total_died'
         ])
         writer.writeheader()
-    
-    # Write agents header
+
     with open(agents_filename, 'w', newline='') as f:
         writer = csv.DictWriter(f, fieldnames=[
             'time_step', 'agent_id', 'x', 'y', 'sugar', 
@@ -53,21 +55,22 @@ def run_simulation(config_name: str, num_agents: int, reproduction: bool,
         writer.writeheader()
     
     # Run simulation
+    # Main simulation loop: advance environment, collect and persist data.
     for step in range(num_steps):
         env.step()
-        
-        # Get statistics
+
+        # Retrieve summary statistics after the step
         stats = env.get_statistics()
-        
-        # Save statistics every step
+
+        # Append statistics to the CSV (time series)
         with open(stats_filename, 'a', newline='') as f:
             writer = csv.DictWriter(f, fieldnames=[
                 'time_step', 'population', 'avg_sugar', 'avg_age',
                 'total_born', 'total_died'
             ])
             writer.writerow(stats)
-        
-        # Save agent data at specified frequency
+
+        # Periodically save a snapshot of all alive agents for later analysis
         if step % save_frequency == 0 or step == num_steps - 1:
             agent_data = env.get_agent_data()
             with open(agents_filename, 'a', newline='') as f:
@@ -78,13 +81,13 @@ def run_simulation(config_name: str, num_agents: int, reproduction: bool,
                 for agent_dict in agent_data:
                     agent_dict['time_step'] = step
                     writer.writerow(agent_dict)
-        
-        # Progress update
+
+        # Periodic console progress so user knows simulation is running
         if (step + 1) % 50 == 0:
             print(f"Step {step + 1}/{num_steps} - Population: {stats['population']} "
                   f"- Avg Sugar: {stats['avg_sugar']:.2f}")
-        
-        # Stop if population dies out
+
+        # Early exit if all agents have died (no population remains)
         if stats['population'] == 0:
             print(f"\nPopulation died out at step {step}")
             break

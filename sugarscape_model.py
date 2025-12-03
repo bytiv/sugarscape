@@ -28,6 +28,7 @@ class Agent:
     
     def __init__(self, x: int, y: int, sugar: int, vision: int, 
                  metabolism: int, max_age: int):
+        # Assign a unique id to each agent (static counter)
         self.id = Agent.agent_counter
         Agent.agent_counter += 1
         self.x = x
@@ -81,7 +82,14 @@ class Sugarscape:
         self.total_agents_died = 0
     
     def _initialize_sugar_grid(self) -> np.ndarray:
-        """Create sugar distribution with two peaks."""
+        """
+        Create sugar distribution with two resource "peaks".
+
+        The original Sugarscape model places richer sugar quantities in
+        specific regions of the grid. This helper computes a simple
+        radial falloff from two peak locations so cells near a peak
+        have more sugar (resource) than distant cells.
+        """
         grid = np.zeros((self.height, self.width))
         
         # Create two sugar peaks (top-left and bottom-right quadrants)
@@ -102,7 +110,15 @@ class Sugarscape:
         return grid
     
     def _initialize_agents(self, num_agents: int):
-        """Initialize agents at random positions."""
+        """
+        Create `num_agents` Agent instances at random grid locations.
+
+        Each agent is given randomized trait values (initial sugar,
+        vision, metabolism, max_age) sampled from reasonable ranges.
+        Agents are appended to `self.agents` and kept in the environment
+        for the duration of the simulation (alive flag is used to mark
+        deaths while preserving history).
+        """
         for _ in range(num_agents):
             # Random position
             x = random.randint(0, self.width - 1)
@@ -118,7 +134,11 @@ class Sugarscape:
             self.agents.append(agent)
     
     def get_cell_sugar(self, x: int, y: int) -> float:
-        """Get sugar level at a cell."""
+        """Return the sugar amount available at coordinates `(x, y)`.
+
+        Note: grid indexing uses `[y, x]` because the first dimension is
+        the row (height) and the second is the column (width).
+        """
         return self.sugar_grid[y, x]
     
     def get_visible_cells(self, agent: Agent) -> List[Tuple[int, int, float]]:
@@ -129,8 +149,10 @@ class Sugarscape:
             List of tuples (x, y, sugar_level)
         """
         visible = []
-        
-        # Look in four cardinal directions
+
+        # Look in four cardinal directions (N, S, E, W). Agents see up to
+        # `agent.vision` cells away. Grid wraps around using modulo so the
+        # environment is toroidal.
         for dx, dy in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
             for distance in range(1, agent.vision + 1):
                 new_x = (agent.x + dx * distance) % self.width
@@ -146,36 +168,51 @@ class Sugarscape:
         return visible
     
     def move_agent(self, agent: Agent):
-        """Move agent to the visible cell with most sugar."""
+        """
+        Move the agent to the best visible unoccupied cell.
+
+        Rules implemented:
+        - Agent inspects visible cells (cardinal directions) and prefers the
+          cell with the largest sugar value.
+        - If multiple cells have equal sugar, prefer the closest one (Manhattan
+          distance). If still tied, break ties randomly.
+        - If no unoccupied cell is visible, the agent stays in place.
+        """
         visible_cells = self.get_visible_cells(agent)
-        
+
         if not visible_cells:
-            return  # Agent can't move
-        
-        # Find cell(s) with maximum sugar
+            return  # No available move (all visible cells occupied)
+
+        # Select cell(s) with the maximum sugar value
         max_sugar = max(cell[2] for cell in visible_cells)
         best_cells = [cell for cell in visible_cells if cell[2] == max_sugar]
-        
-        # If multiple cells have same sugar, choose closest
+
+        # If there are multiple best cells, pick the one(s) with smallest distance
         if len(best_cells) > 1:
-            distances = [abs(cell[0] - agent.x) + abs(cell[1] - agent.y) 
-                        for cell in best_cells]
+            distances = [abs(cell[0] - agent.x) + abs(cell[1] - agent.y)
+                         for cell in best_cells]
             min_dist = min(distances)
-            best_cells = [best_cells[i] for i, d in enumerate(distances) 
-                         if d == min_dist]
-        
-        # Move to chosen cell (random if still tied)
+            best_cells = [best_cells[i] for i, d in enumerate(distances) if d == min_dist]
+
+        # Final tie-breaker: random choice
         chosen_cell = random.choice(best_cells)
         agent.x, agent.y = chosen_cell[0], chosen_cell[1]
     
     def agent_eat(self, agent: Agent):
-        """Agent eats sugar at current location."""
-        sugar_here = self.sugar_grid[agent.y, agent.x]
-        agent.sugar += sugar_here
-        self.sugar_grid[agent.y, agent.x] = 0  # Sugar consumed
-        
-        # Metabolize
-        agent.sugar -= agent.metabolism
+                """
+                Agent consumes all sugar at its current cell and then metabolizes.
+
+                - Add the sugar at the current location to the agent's sugar store.
+                - Clear the sugar at that cell (it's consumed).
+                - Subtract the agent's metabolism (sugar cost per step). If sugar
+                    falls to zero or below the agent will die during the step check.
+                """
+                sugar_here = self.sugar_grid[agent.y, agent.x]
+                agent.sugar += sugar_here
+                self.sugar_grid[agent.y, agent.x] = 0  # Sugar consumed
+
+                # Agent consumes sugar to maintain itself (metabolism)
+                agent.sugar -= agent.metabolism
     
     def agent_reproduce(self, agent: Agent) -> Optional[Agent]:
         """
@@ -188,6 +225,7 @@ class Sugarscape:
         Returns:
             New agent if reproduction occurs, None otherwise
         """
+        # If reproduction is globally disabled, skip
         if not self.reproduction_enabled:
             return None
         
@@ -233,46 +271,58 @@ class Sugarscape:
         return None
     
     def step(self):
-        """Execute one time step of the simulation."""
+        """
+        Advance the environment by one discrete time step.
+
+        Per-step sequence for each alive agent (in randomized order):
+        1. Move to a preferred cell.
+        2. Eat sugar at the new location.
+        3. Age one time step and check for death (starvation or old age).
+        4. Potentially reproduce if conditions are met.
+
+        After agents act, new offspring are appended, sugar regrows across
+        the grid, and death counters/statistics are updated.
+        """
         self.time_step += 1
-        
-        # Randomize agent order each step
+
+        # Randomize agent order to avoid update-order bias
         active_agents = [a for a in self.agents if a.alive]
         random.shuffle(active_agents)
-        
+
         new_agents = []
-        
+
         for agent in active_agents:
             if not agent.alive:
                 continue
-            
-            # Agent acts
+
+            # Agent decides where to move and then consumes sugar
             self.move_agent(agent)
             self.agent_eat(agent)
             agent.age += 1
-            
-            # Check for death
+
+            # Death conditions: no sugar left or exceeded lifespan
             if agent.sugar <= 0 or agent.age >= agent.max_age:
                 agent.alive = False
                 self.total_agents_died += 1
-            
-            # Check for reproduction
+
+            # Reproduction (if still alive after metabolism)
             if agent.alive:
                 child = self.agent_reproduce(agent)
                 if child:
                     new_agents.append(child)
-        
-        # Add new agents
+
+        # Add any newborn agents to the population list
         self.agents.extend(new_agents)
-        
-        # Grow back sugar
+
+        # Regrow sugar across the landscape toward each cell's capacity
         self.grow_sugar()
-        
-        # Clean up dead agents (keep for statistics but mark as dead)
-        # self.agents = [a for a in self.agents if a.alive]
     
     def grow_sugar(self):
-        """Grow sugar back towards maximum capacity."""
+        """
+        Incrementally regrow sugar at each cell until it reaches the cell's
+        maximum capacity (`self.max_sugar`). This simulates resource renewal
+        in the environment.
+        """
         for i in range(self.height):
             for j in range(self.width):
                 if self.sugar_grid[i, j] < self.max_sugar[i, j]:
@@ -282,9 +332,16 @@ class Sugarscape:
                     )
     
     def get_statistics(self) -> dict:
-        """Get current simulation statistics."""
+        """
+        Compute and return a small dictionary of population-level statistics
+        useful for monitoring and saving simulation progress.
+
+        Statistics include current `time_step`, living `population`, average
+        sugar (wealth) among living agents, average age, and cumulative
+        totals for births and deaths.
+        """
         alive_agents = [a for a in self.agents if a.alive]
-        
+
         if not alive_agents:
             return {
                 'time_step': self.time_step,
@@ -294,7 +351,7 @@ class Sugarscape:
                 'total_born': self.total_agents_born,
                 'total_died': self.total_agents_died,
             }
-        
+
         return {
             'time_step': self.time_step,
             'population': len(alive_agents),
@@ -305,7 +362,12 @@ class Sugarscape:
         }
     
     def get_agent_data(self) -> List[dict]:
-        """Get data for all alive agents."""
+        """
+        Return a list of dictionaries representing each currently alive
+        agent. This is suitable for writing to CSVs for later analysis and
+        visualization. Each dictionary contains spatial location, traits,
+        and current state values.
+        """
         alive_agents = [a for a in self.agents if a.alive]
         return [
             {
